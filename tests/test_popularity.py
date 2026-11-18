@@ -63,6 +63,19 @@ def catalog(location, location_data, crud_users):
     return [location, second, third]
 
 
+def test_rating_filter_uses_exact_average_while_response_rounds(catalog):
+    client = APIClient()
+    location_id = catalog[0].pk
+    for params in ({}, {"rating_min": "4.66"}):
+        response = client.get("/api/locations/", params)
+        assert response.status_code == 200
+        row = next(item for item in response.json()["results"] if item["id"] == location_id)
+        assert row["rating"] == 4.67
+    response = client.get("/api/locations/", {"rating_min": "4.67"})
+    assert response.status_code == 200
+    assert location_id not in [item["id"] for item in response.json()["results"]]
+
+
 @pytest.mark.parametrize(
     ("params", "positions"),
     [

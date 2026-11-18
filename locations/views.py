@@ -18,8 +18,17 @@ LIST_PARAMETERS = [
     OpenApiParameter("search", str, description="Пошук у назві та описі."),
     OpenApiParameter("category", int, description="ID категорії."),
     OpenApiParameter("author", int, description="ID автора."),
-    OpenApiParameter("rating_min", {"type": "number", "minimum": 1, "maximum": 5}),
-    OpenApiParameter("rating_max", {"type": "number", "minimum": 1, "maximum": 5}),
+    OpenApiParameter(
+        "rating_min", {"type": "number", "minimum": 1, "maximum": 5},
+        description=(
+            "Нижня межа точного середнього рейтингу без округлення. "
+            "Середнє 4.666… відображається як 4.67, але не проходить rating_min=4.67."
+        ),
+    ),
+    OpenApiParameter(
+        "rating_max", {"type": "number", "minimum": 1, "maximum": 5},
+        description="Верхня межа точного середнього рейтингу без округлення.",
+    ),
     OpenApiParameter("ordering", str, enum=LOCATION_ORDERINGS),
 ]
 
@@ -115,8 +124,9 @@ class LocationViewSet(ModelViewSet):
     @action(detail=False, methods=["get"], url_path="export/csv", pagination_class=None,
             serializer_class=LocationExportSerializer, renderer_classes=[CSVRenderer])
     def export_csv(self, request):
+        serializer = self.get_serializer(self.get_queryset(), many=True)
         return Response(
-            export_locations_csv(self.get_queryset()),
+            export_locations_csv(serializer.data, columns=serializer.child.Meta.fields),
             headers={"Content-Disposition": 'attachment; filename="locations.csv"'},
         )
 

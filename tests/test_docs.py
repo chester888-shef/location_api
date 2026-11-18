@@ -136,6 +136,9 @@ def test_location_statistics_and_filter_parameters_are_documented():
     assert {item["name"] for item in operation["parameters"]} == {
         "search", "category", "author", "rating_min", "rating_max", "ordering", "page"
     }
+    parameters = {item["name"]: item for item in operation["parameters"]}
+    for name in ("rating_min", "rating_max"):
+        assert "без округлення" in parameters[name]["description"]
     detail = schema["paths"]["/api/locations/{id}/"]["get"]
     output = schema_component(
         schema, detail["responses"]["200"]["content"]["application/json"]["schema"]
@@ -143,6 +146,7 @@ def test_location_statistics_and_filter_parameters_are_documented():
     computed = {"rating", "popularity", "reviews_count", "views_count", "views_7d"}
     assert all(output["properties"][field]["readOnly"] for field in computed)
     assert output["properties"]["rating"]["nullable"]
+    assert "лише для відображення" in output["properties"]["rating"]["description"]
     create = schema["paths"]["/api/locations/"]["post"]
     request = schema_component(
         schema, create["requestBody"]["content"]["application/json"]["schema"]

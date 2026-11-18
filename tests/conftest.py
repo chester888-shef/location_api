@@ -6,9 +6,19 @@ from django.contrib.auth import get_user_model
 from rest_framework.test import APIClient
 
 from categories.models import Category
+from core.models import CacheRevision
 from locations.models import Location
 
 CRUD_PASSWORD = "Map-Dnipro!2026-Reader"
+
+
+@pytest.fixture(autouse=True)
+def seed_location_revision(request):
+    database_fixtures = {"db", "transactional_db", "django_db_reset_sequences", "django_db_serialized_rollback"}
+    if request.node.get_closest_marker("django_db") or database_fixtures.intersection(request.fixturenames):
+        request.getfixturevalue("db")
+        # Transactional tests flush data seeded by migrations between cases.
+        CacheRevision.objects.get_or_create(name="locations")
 
 
 @pytest.fixture(autouse=True)

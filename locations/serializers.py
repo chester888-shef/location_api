@@ -1,12 +1,10 @@
 import math
 
-from django.db import transaction
 from rest_framework import serializers
-from rest_framework.exceptions import NotFound
 
 from categories.models import Category
-from core.cache import bump_location_revision
 from locations.models import Location
+from locations.services import create_location, update_location
 
 
 class CoordinateField(serializers.FloatField):
@@ -24,7 +22,10 @@ class LocationSerializer(serializers.ModelSerializer):
     )
     latitude = CoordinateField(min_value=-90, max_value=90)
     longitude = CoordinateField(min_value=-180, max_value=180)
-    rating = serializers.FloatField(read_only=True, allow_null=True)
+    rating = serializers.FloatField(
+        read_only=True, allow_null=True,
+        help_text="Середній рейтинг, округлений до 2 знаків лише для відображення.",
+    )
     popularity = serializers.FloatField(read_only=True)
     reviews_count = serializers.IntegerField(read_only=True)
     views_count = serializers.IntegerField(read_only=True)
@@ -57,41 +58,11 @@ class LocationSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(errors)
         return attrs
 
-    def _lock_category(self, validated_data):
-        if "category" in validated_data:
-            try:
-                validated_data["category"] = Category.objects.select_for_update().get(
-                    pk=validated_data["category"].pk
-                )
-            except Category.DoesNotExist as error:
-                raise serializers.ValidationError(
-                    {"category": "Категорію видалено. Виберіть наявну категорію."}
-                ) from error
-
-    @transaction.atomic
     def create(self, validated_data):
-        # Category -> Location -> CacheRevision, matching category deletion.
-        self._lock_category(validated_data)
-        instance = super().create(validated_data)
-        bump_location_revision()
-        return Location.objects.with_statistics().get(pk=instance.pk)
+        return create_location(data=validated_data)
 
-    @transaction.atomic
     def update(self, instance, validated_data):
-        self._lock_category(validated_data)
-        try:
-            instance = Location.objects.select_for_update().get(pk=instance.pk, is_deleted=False)
-        except Location.DoesNotExist as error:
-            raise NotFound("Локацію не знайдено.") from error
-        if instance.category_id is None and "category" not in validated_data:
-            raise serializers.ValidationError(
-                {"category": "Після видалення категорії потрібно призначити нову."}
-            )
-        for field, value in validated_data.items():
-            setattr(instance, field, value)
-        instance.save(update_fields=[*validated_data, "updated_at"])
-        bump_location_revision()
-        return Location.objects.with_statistics().get(pk=instance.pk)
+        return update_location(instance, data=validated_data)
 
 
 class LocationReadSerializer(LocationSerializer):

@@ -1,9 +1,7 @@
-from django.db import IntegrityError, transaction
-from django.shortcuts import get_object_or_404
 from rest_framework import serializers
 
 from categories.models import Category
-from core.cache import bump_location_revision
+from categories.services import create_category, update_category
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -20,23 +18,8 @@ class CategorySerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Категорія з такою назвою вже існує.")
         return value
 
-    def save(self, **kwargs):
-        is_update = self.instance is not None
-        try:
-            with transaction.atomic():
-                if is_update:
-                    self.instance = get_object_or_404(
-                        Category.objects.select_for_update(), pk=self.instance.pk
-                    )
-                instance = super().save(**kwargs)
-                if is_update:
-                    bump_location_revision()
-                return instance
-        except IntegrityError as error:
-            # Preserve other database failures; only a duplicate name is a 400.
-            diagnostic = getattr(error.__cause__, "diag", None)
-            if getattr(diagnostic, "constraint_name", None) == "category_name_ci_unique":
-                raise serializers.ValidationError(
-                    {"name": ["Категорія з такою назвою вже існує."]}
-                ) from error
-            raise
+    def create(self, validated_data):
+        return create_category(data=validated_data)
+
+    def update(self, instance, validated_data):
+        return update_category(instance, data=validated_data)

@@ -17,12 +17,6 @@ from locations.views import LocationViewSet
 pytestmark = pytest.mark.django_db(transaction=True)
 
 
-@pytest.fixture(autouse=True)
-def seed_revision(db):
-    # Transactional tests flush migration data between cases.
-    CacheRevision.objects.get_or_create(name="locations")
-
-
 def send_from_connection(client, method, url, payload, *, wrapper=None, started=None, backend=None):
     close_old_connections()
     try:
@@ -124,6 +118,27 @@ def test_category_update_cannot_resurrect_deleted_row(
     location.refresh_from_db()
     assert location.category_id is None
     assert revision() == after_delete_revision
+
+
+@pytest.mark.parametrize("method", ["post", "patch"])
+def test_category_write_rejects_duplicate_created_after_validation(
+    category, crud_users, crud_client, monkeypatch, method
+):
+    admin = crud_client(crud_users["admin"])
+    url = "/api/categories/" if method == "post" else f"/api/categories/{category.pk}/"
+    hook = "perform_create" if method == "post" else "perform_update"
+    with pause_after_validation(
+        monkeypatch, CategoryViewSet, hook, admin, method, url, {"name": "Музеї"}
+    ) as (resume, future):
+        Category.objects.create(name="МУЗЕЇ")
+        before = list(Category.objects.order_by("pk").values())
+        before_revision = revision()
+        resume.set()
+        response = future.result(timeout=10)
+    assert response.status_code == 400
+    assert "name" in response.json()
+    assert list(Category.objects.order_by("pk").values()) == before
+    assert revision() == before_revision
 
 
 @pytest.mark.parametrize("method", ["post", "put", "patch"])

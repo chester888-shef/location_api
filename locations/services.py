@@ -5,17 +5,15 @@ from django.db import transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.utils.crypto import salted_hmac
-from rest_framework.exceptions import PermissionDenied
+from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
 
+from categories.models import Category
 from core.cache import bump_location_revision, remember_view_hint, view_hint_exists
 from locations.models import Location, LocationView, LocationViewGate
 from locations.policies import can_modify_location
-from locations.serializers import LocationExportSerializer
 
 
-def export_locations_csv(queryset):
-    records = LocationExportSerializer(queryset, many=True).data
-    columns = LocationExportSerializer.Meta.fields
+def export_locations_csv(records, *, columns):
     frame = pd.DataFrame(records, columns=columns, dtype=object)
     for field in ("title", "description", "address"):
         frame[field] = frame[field].map(
@@ -23,6 +21,45 @@ def export_locations_csv(queryset):
             if value.startswith(("=", "+", "-", "@", "\t", "\r")) else value
         )
     return frame.to_csv(index=False, lineterminator="\r\n").encode("utf-8-sig")
+
+
+def _lock_category(data):
+    if "category" in data:
+        try:
+            data["category"] = Category.objects.select_for_update().get(pk=data["category"].pk)
+        except Category.DoesNotExist as error:
+            raise ValidationError(
+                {"category": "Категорію видалено. Виберіть наявну категорію."}
+            ) from error
+
+
+@transaction.atomic
+def create_location(*, data):
+    # Category -> Location -> CacheRevision, matching category deletion.
+    data = data.copy()
+    _lock_category(data)
+    location = Location.objects.create(**data)
+    bump_location_revision()
+    return Location.objects.with_statistics().get(pk=location.pk)
+
+
+@transaction.atomic
+def update_location(location, *, data):
+    data = data.copy()
+    _lock_category(data)
+    try:
+        location = Location.objects.select_for_update().get(pk=location.pk, is_deleted=False)
+    except Location.DoesNotExist as error:
+        raise NotFound("Локацію не знайдено.") from error
+    if location.category_id is None and "category" not in data:
+        raise ValidationError(
+            {"category": "Після видалення категорії потрібно призначити нову."}
+        )
+    for field, value in data.items():
+        setattr(location, field, value)
+    location.save(update_fields=[*data, "updated_at"])
+    bump_location_revision()
+    return Location.objects.with_statistics().get(pk=location.pk)
 
 
 @transaction.atomic

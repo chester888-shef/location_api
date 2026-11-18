@@ -84,6 +84,8 @@ docker compose exec web python manage.py createsuperuser
    `rating_min/rating_max` (1–5), `ordering`: `created_at`, `rating`, `popularity`
    або ті самі з `-`. Невідоме сортування чи min > max → **400**.
    Порожній рейтинг іде в кінець сортування й не проходить фільтри рейтингу.
+   Межі порівнюються з точним середнім: оцінки 4, 5, 5 дають у відповіді `4.67`,
+   проходять `rating_min=4.66`, але не проходять `rating_min=4.67`.
 3. Список кешується на **300 секунд**, окремо для фільтрів/сортування/сторінки.
    Superuser обходить кеш. Для ручної перевірки відкрий список із `search=Тест`,
    створи локацію з цією назвою й повтори запит: вона має з’явитися одразу.
@@ -119,10 +121,14 @@ curl -H 'Accept: text/csv' 'http://localhost:8000/api/locations/export/csv/?orde
   у полі `category`. Якщо запис уже заблокував категорію, її видалення чекає commit.
 - Регресії перевіряють окремі з’єднання PostgreSQL, дані й ревізію після відмови.
   Поля JSON/CSV у контрактному тесті задані незалежно від серіалізатора.
+- Запис локацій і категорій, блокування та інвалідація виконуються в сервісах.
+  Rollback перевіряється після реального збільшення ревізії. Фікстура готує її
+  для тестів із БД; окремий тест міграції починає з порожньої таблиці.
+- Формулу перевіряють unit-тест ORM-виразу без БД і числові тести PostgreSQL.
 
 ```bash
 docker compose build web
-docker compose run --rm web pytest tests/test_location_concurrency.py tests/test_locations.py tests/test_export.py -q
+docker compose run --rm web pytest tests/test_write_services.py tests/test_location_concurrency.py tests/test_cache_revision.py tests/test_popularity_expression.py tests/test_popularity.py tests/test_export.py -q
 ```
 
 ## Скидання пароля
