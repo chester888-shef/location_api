@@ -3,7 +3,8 @@ from types import SimpleNamespace
 import pytest
 from django.contrib.auth.models import AnonymousUser
 
-from core.permissions import IsAuthorOrSuperuser, IsSuperuserOrReadOnly
+from core.permissions import IsSuperuserOrReadOnly
+from locations.policies import LocationPermission
 
 
 @pytest.mark.parametrize(
@@ -36,7 +37,7 @@ def test_permissions_follow_role_and_method_matrix(
     location = SimpleNamespace(author_id=1)
     public_read = method in {"GET", "HEAD", "OPTIONS"}
 
-    assert IsAuthorOrSuperuser().has_object_permission(request, None, location) == (
+    assert LocationPermission().has_object_permission(request, None, location) == (
         public_read or can_edit_location
     )
     assert IsSuperuserOrReadOnly().has_permission(request, None) == (

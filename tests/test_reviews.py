@@ -30,7 +30,7 @@ def test_review_creation_uses_session_author_and_url_location(
     before = revision()
     client = crud_client(crud_users.get(role))
     url = f"/api/locations/{location.pk}/reviews/"
-    assert client.get(url).json() == []
+    assert client.get(url).json()["results"] == []
     response = api_write(client, "post", url, {
         "rating": 5, "comment": "Варто відвідати.",
         "author": crud_users["admin"].pk, "location": another.pk,
@@ -45,7 +45,7 @@ def test_review_creation_uses_session_author_and_url_location(
         assert created.location == location
         assert created.rating == 5
         assert revision() == before + 1
-        assert crud_client().get(url).json()[0]["id"] == created.pk
+        assert crud_client().get(url).json()["results"][0]["id"] == created.pk
 
 
 def test_duplicate_review_is_409_without_revision_change(
@@ -168,7 +168,7 @@ def test_deleted_location_hides_reviews_and_disallows_writes(
     response = client.get(list_url)
     assert response.status_code == (200 if role == "admin" else 404)
     if role == "admin":
-        assert response.json()[0]["id"] == review.pk
+        assert response.json()["results"][0]["id"] == review.pk
     before = revision()
     writes = [
         ("post", list_url, {"rating": 2, "comment": "Текст"}),

@@ -38,7 +38,6 @@ class RegisterSerializer(serializers.Serializer):
 
     def create(self, validated_data):
         try:
-            # The savepoint allows a concurrent duplicate to become a validation error.
             with transaction.atomic():
                 return User.objects.create_user(**validated_data)
         except IntegrityError as error:

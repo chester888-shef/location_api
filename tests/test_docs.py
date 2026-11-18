@@ -39,6 +39,8 @@ def test_schema_contains_implemented_endpoints_and_session_security():
         "/api/categories/{id}/",
         "/api/locations/",
         "/api/locations/{id}/",
+        "/api/locations/export/json/",
+        "/api/locations/export/csv/",
         "/api/locations/{location_id}/reviews/",
         "/api/reviews/{id}/",
         "/api/reviews/{id}/vote/",
@@ -109,6 +111,8 @@ def test_location_schema_requires_category_on_input_and_allows_null_on_read():
         schema, detail["responses"]["200"]["content"]["application/json"]["schema"]
     )
     assert response["properties"]["category"]["nullable"]
+    assert response["properties"]["latitude"]["readOnly"]
+    assert response["properties"]["longitude"]["readOnly"]
 
 
 def test_review_and_vote_schemas_keep_server_fields_out_of_input():
@@ -124,3 +128,41 @@ def test_review_and_vote_schemas_keep_server_fields_out_of_input():
         schema, vote["requestBody"]["content"]["application/json"]["schema"]
     )
     assert set(request["properties"]) == {"value"}
+
+
+def test_location_statistics_and_filter_parameters_are_documented():
+    schema = get_schema()
+    operation = schema["paths"]["/api/locations/"]["get"]
+    assert {item["name"] for item in operation["parameters"]} == {
+        "search", "category", "author", "rating_min", "rating_max", "ordering", "page"
+    }
+    detail = schema["paths"]["/api/locations/{id}/"]["get"]
+    output = schema_component(
+        schema, detail["responses"]["200"]["content"]["application/json"]["schema"]
+    )
+    computed = {"rating", "popularity", "reviews_count", "views_count", "views_7d"}
+    assert all(output["properties"][field]["readOnly"] for field in computed)
+    assert output["properties"]["rating"]["nullable"]
+    create = schema["paths"]["/api/locations/"]["post"]
+    request = schema_component(
+        schema, create["requestBody"]["content"]["application/json"]["schema"]
+    )
+    assert computed.isdisjoint(request["properties"])
+
+
+def test_pagination_and_export_contracts_are_documented():
+    schema = get_schema()
+    for path in ("/api/locations/", "/api/categories/", "/api/locations/{location_id}/reviews/"):
+        operation = schema["paths"][path]["get"]
+        output = schema_component(schema, operation["responses"]["200"]["content"]["application/json"]["schema"])
+        assert set(output["properties"]) == {"count", "next", "previous", "results"}
+        assert "page" in {parameter["name"] for parameter in operation["parameters"]}
+    for suffix in ("json", "csv"):
+        operation = schema["paths"][f"/api/locations/export/{suffix}/"]["get"]
+        assert "page" not in {parameter["name"] for parameter in operation["parameters"]}
+        assert not operation.get("security")
+    output = schema["paths"]["/api/locations/export/json/"]["get"]["responses"]["200"]["content"]["application/json"]["schema"]
+    assert output["type"] == "array"
+    assert "is_deleted" not in schema_component(schema, output["items"])["properties"]
+    content = schema["paths"]["/api/locations/export/csv/"]["get"]["responses"]["200"]["content"]
+    assert set(content) == {"text/csv"}

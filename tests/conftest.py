@@ -1,3 +1,6 @@
+from copy import deepcopy
+from uuid import uuid4
+
 import pytest
 from django.contrib.auth import get_user_model
 from rest_framework.test import APIClient
@@ -6,6 +9,13 @@ from categories.models import Category
 from locations.models import Location
 
 CRUD_PASSWORD = "Map-Dnipro!2026-Reader"
+
+
+@pytest.fixture(autouse=True)
+def isolate_test_cache_keys(settings):
+    caches = deepcopy(settings.CACHES)
+    caches["default"]["KEY_PREFIX"] += f":{uuid4().hex}"
+    settings.CACHES = caches
 
 
 @pytest.fixture
@@ -70,3 +80,14 @@ def location(crud_users, location_data):
     values = {**location_data, "category_id": location_data["category"]}
     values.pop("category")
     return Location.objects.create(author=crud_users["owner"], **values)
+
+
+@pytest.fixture
+def many_locations(location, location_data, crud_users):
+    values = {key: value for key, value in location_data.items() if key != "category"}
+    return [location, *Location.objects.bulk_create([
+        Location(**{**values, "title": f"Локація {index}"},
+                 category_id=location_data["category"], author=crud_users["owner"])
+        for index in range(1, 35)
+    ])]
+

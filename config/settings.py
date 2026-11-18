@@ -98,6 +98,7 @@ CACHES = {
         "LOCATION": REDIS_URL,
         "TIMEOUT": 300,
         "KEY_PREFIX": "location_api",
+        "OPTIONS": {"socket_connect_timeout": 0.5, "socket_timeout": 0.5},
     }
 }
 
@@ -109,16 +110,17 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
     "DEFAULT_FILTER_BACKENDS": ["django_filters.rest_framework.DjangoFilterBackend"],
     "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
+    "DEFAULT_PAGINATION_CLASS": "core.pagination.StandardPagination",
 }
 
 SPECTACULAR_SETTINGS = {
     "TITLE": "Мапа популярності локацій API",
     "DESCRIPTION": (
-        "Етапи 1–4: автентифікація, категорії, локації, відгуки та Like/Dislike. "
+        "MVP, етапи 1–6: автентифікація, локації, відгуки, рейтинг, кеш і JSON/CSV-експорт. "
         "Спочатку виконайте GET /api/auth/csrf/, потім POST /api/auth/login/. "
         "Swagger передає актуальний CSRF-токен із cookie автоматично."
     ),
-    "VERSION": "0.4.0",
+    "VERSION": "0.6.0",
     "SERVE_INCLUDE_SCHEMA": False,
     "SERVE_PERMISSIONS": ["rest_framework.permissions.AllowAny"],
     "COMPONENT_SPLIT_REQUEST": True,

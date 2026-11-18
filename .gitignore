@@ -11,3 +11,16 @@ __pycache__/
 venv/
 env/
 .venv/
+# Інші локальні env-файли; приклад налаштувань залишаємо
+.env.*
+!.env.example
+
+# Кеш pytest
+.pytest_cache/
+
+# Експорт із прикладу README
+/locations.csv
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml

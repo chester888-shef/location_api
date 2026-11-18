@@ -38,7 +38,6 @@ def send_password_reset_email(email):
             fail_silently=False,
         )
     except (SMTPException, OSError) as error:
-        # Exception text can contain recipient addresses or SMTP credentials.
         logger.warning("Password reset email submission failed (%s).", type(error).__name__)
     else:
         if sent == 0:

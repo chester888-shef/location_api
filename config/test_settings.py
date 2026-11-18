@@ -20,6 +20,7 @@ CACHES = {
         "LOCATION": TEST_REDIS_URL,  # noqa: F405
         "TIMEOUT": 300,
         "KEY_PREFIX": f"location_api:test:{os.getpid()}",
+        "OPTIONS": {"socket_connect_timeout": 0.5, "socket_timeout": 0.5},
     }
 }
 EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"

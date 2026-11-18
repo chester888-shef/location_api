@@ -1,4 +1,5 @@
 from django.db import IntegrityError, transaction
+from django.shortcuts import get_object_or_404
 from rest_framework import serializers
 
 from categories.models import Category
@@ -23,6 +24,10 @@ class CategorySerializer(serializers.ModelSerializer):
         is_update = self.instance is not None
         try:
             with transaction.atomic():
+                if is_update:
+                    self.instance = get_object_or_404(
+                        Category.objects.select_for_update(), pk=self.instance.pk
+                    )
                 instance = super().save(**kwargs)
                 if is_update:
                     bump_location_revision()

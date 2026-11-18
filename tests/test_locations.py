@@ -1,6 +1,8 @@
 import pytest
 from django.db import IntegrityError, transaction
+from rest_framework.exceptions import NotFound
 
+from core.models import CacheRevision
 from locations.models import Location
 from locations.serializers import LocationSerializer
 
@@ -62,7 +64,7 @@ def test_soft_delete_visibility(location, crud_users, crud_client, api_write, ro
     client = crud_client(crud_users.get(role))
     response = client.get(url)
     assert response.status_code == (200 if role == "admin" else 404)
-    ids = [item["id"] for item in client.get("/api/locations/").json()]
+    ids = [item["id"] for item in client.get("/api/locations/").json()["results"]]
     assert (location.pk in ids) == (role == "admin")
     if role == "admin":
         assert response.json()["is_deleted"] is True
@@ -127,13 +129,40 @@ def test_coordinate_ranges_are_enforced_in_postgresql(location, field, value):
         Location.objects.filter(pk=location.pk).update(**{field: value})
 
 
-def test_partial_update_does_not_restore_concurrently_deleted_location(location):
+def test_partial_update_rejects_concurrently_deleted_location(location):
     serializer = LocationSerializer(instance=location, data={"title": "Нова назва"}, partial=True)
     assert serializer.is_valid(), serializer.errors
     Location.objects.filter(pk=location.pk).update(is_deleted=True)
-    serializer.save()
+    before = Location.objects.filter(pk=location.pk).values().get()
+    revision = CacheRevision.objects.get(name="locations").version
+    with pytest.raises(NotFound):
+        serializer.save()
     location.refresh_from_db()
     assert location.is_deleted
+    assert Location.objects.filter(pk=location.pk).values().get() == before
+    assert CacheRevision.objects.get(name="locations").version == revision
+
+
+@pytest.mark.parametrize("method", ["post", "put", "patch"])
+@pytest.mark.parametrize(("field", "value"), [
+    ("category", "fractional"),
+    ("latitude", True), ("latitude", False),
+    ("longitude", True), ("longitude", False),
+])
+def test_location_rejects_lossy_numeric_types(
+    location, location_data, crud_users, crud_client, api_write, method, field, value
+):
+    client = crud_client(crud_users["owner"])
+    payload = {} if method == "patch" else location_data.copy()
+    payload[field] = location.category_id + 0.75 if value == "fractional" else value
+    before = list(Location.objects.values())
+    revision = CacheRevision.objects.get(name="locations").version
+    url = "/api/locations/" if method == "post" else f"/api/locations/{location.pk}/"
+    response = api_write(client, method, url, payload)
+    assert response.status_code == 400
+    assert field in response.json()
+    assert list(Location.objects.values()) == before
+    assert CacheRevision.objects.get(name="locations").version == revision
 
 
 @pytest.mark.parametrize(
